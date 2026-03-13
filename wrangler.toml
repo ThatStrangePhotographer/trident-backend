@@ -1,39 +1,6 @@
-export default {
-  async fetch(request, env, ctx) {
-    const origin = request.headers.get("Origin");
+name = "trident-backend"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
 
-    // Preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Access-Control-Allow-Origin": origin,
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
-          "Access-Control-Max-Age": "86400"
-        }
-      });
-    }
-
-    const response = await handleRequest(request, env, ctx);
-
-    const headers = new Headers(response.headers);
-
-    // Allow any subdomain of tridenthq.team
-    if (
-      origin &&
-      (origin === "https://tridenthq.team" ||
-       origin.endsWith(".tridenthq.team"))
-    ) {
-      headers.set("Access-Control-Allow-Origin", origin);
-    }
-
-    headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-    return new Response(response.body, {
-      status: response.status,
-      headers
-    });
-  }
-};
+[vars]
+SUPABASE_URL = "https://gphzzahikvvvzamrbgkk.supabase.co"
