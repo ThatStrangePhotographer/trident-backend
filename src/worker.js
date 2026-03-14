@@ -30,6 +30,43 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
+    // LOGIN (SAFE)
+    // ============================================================
+    if (url.pathname === "/api/login" && request.method === "POST") {
+      const { username, password } = await request.json();
+
+      if (!username || !password) {
+        return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
+      }
+
+      // Only fetch what we need
+      const { data: user, error } = await supabase
+        .from("members")
+        .select("id, username, password, role, group_id")
+        .eq("username", username.toLowerCase())
+        .single();
+
+      if (error || !user) {
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+      }
+
+      if (user.password !== password) {
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+      }
+
+      // Build safe session object
+      const session = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        group_id: user.group_id,
+        created_at: Date.now()
+      };
+
+      return wrapCors(Response.json(session), origin, allowed);
+    }
+
+    // ============================================================
     // GROUPS
     // ============================================================
     if (url.pathname === "/api/groups" && request.method === "GET") {
@@ -80,7 +117,6 @@ export default {
     // ============================================================
     if (url.pathname === "/api/drill-references" && request.method === "GET") {
       const category = url.searchParams.get("category");
-      const all = url.searchParams.get("all");
 
       let query = supabase.from("drillreference").select("*");
       if (category) query = query.eq("category", category);
@@ -100,7 +136,6 @@ export default {
       let query = supabase.from("session").select("*");
 
       if (!all) {
-        // Default: only future or recent sessions
         const today = new Date().toISOString().split("T")[0];
         query = query.gte("date", today);
       }
@@ -116,10 +151,8 @@ export default {
     // ============================================================
     if (url.pathname === "/api/attendance" && request.method === "GET") {
       const session_id = url.searchParams.get("session_id");
-      const all = url.searchParams.get("all");
 
       let query = supabase.from("attendance").select("*");
-
       if (session_id) query = query.eq("session_id", session_id);
 
       const { data, error } = await query.order("created_date", { ascending: false });
@@ -128,7 +161,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // POST /api/attendance
     if (url.pathname === "/api/attendance" && request.method === "POST") {
       const body = await request.json();
 
@@ -143,7 +175,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // PATCH /api/attendance/:id
     const match = url.pathname.match(/^\/api\/attendance\/(.+)$/);
     if (match && request.method === "PATCH") {
       const id = match[1];
