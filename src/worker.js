@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from "bcryptjs";
 
 function getSupabase(env) {
   return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -30,7 +31,7 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN (SAFE)
+    // LOGIN (SECURE, BCRYPT)
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password } = await request.json();
@@ -39,7 +40,7 @@ export default {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
-      // Only fetch what we need
+      // Fetch only what we need
       const { data: user, error } = await supabase
         .from("members")
         .select("id, username, password, role, group_id")
@@ -50,7 +51,9 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      if (user.password !== password) {
+      // Compare bcrypt hash
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
