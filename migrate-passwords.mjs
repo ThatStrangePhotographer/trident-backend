@@ -4,8 +4,8 @@ import bcrypt from "bcryptjs";
 // ---------------------------------------------
 // 1. CONFIGURE THESE VALUES
 // ---------------------------------------------
-const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
-const SERVICE_ROLE_KEY = "YOUR_SERVICE_ROLE_KEY"; // NEVER expose publicly
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // ---------------------------------------------
 // 2. INIT CLIENT
