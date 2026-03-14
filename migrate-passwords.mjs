@@ -1,26 +1,34 @@
+import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 
-// ---------------------------------------------
-// 1. CONFIGURE THESE VALUES
-// ---------------------------------------------
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Load .env file
+dotenv.config();
 
 // ---------------------------------------------
-// 2. INIT CLIENT
+// 1. Use the same pattern as your Worker
 // ---------------------------------------------
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+function getSupabase() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error("Missing SUPABASE_URL in .env");
+  if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY in .env");
+
+  return createClient(url, key);
+}
+
+const supabase = getSupabase();
 
 // ---------------------------------------------
-// 3. HELPER: detect if a password is already hashed
+// 2. Helper: detect if password is already hashed
 // ---------------------------------------------
 function isHashed(password) {
   return typeof password === "string" && password.startsWith("$2");
 }
 
 // ---------------------------------------------
-// 4. MAIN MIGRATION
+// 3. Migration logic
 // ---------------------------------------------
 async function migrate() {
   console.log("Fetching members...");
