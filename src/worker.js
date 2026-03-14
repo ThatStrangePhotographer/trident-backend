@@ -5,17 +5,28 @@ function getSupabase(env) {
   return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
+// ------------------------------------------------------------
+// AUTOMATIC PASSWORD HASHING (Option 1)
+// ------------------------------------------------------------
+async function ensureHashed(password) {
+  if (!password) return null;
+
+  // Already hashed?
+  if (password.startsWith("$2")) {
+    return password;
+  }
+
+  // Plaintext → hash it
+  return await bcrypt.hash(password, 10);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin");
 
-    // Allow root + any subdomain of tridenthq.team
     const allowed = /^https:\/\/([a-z0-9-]+\.)*tridenthq\.team$/i;
 
-    // -----------------------------
-    // Handle CORS preflight
-    // -----------------------------
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -40,7 +51,6 @@ export default {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
-      // Fetch only what we need
       const { data: user, error } = await supabase
         .from("members")
         .select("id, username, password, role, group_id")
@@ -51,13 +61,11 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      // Compare bcrypt hash
       const valid = await bcrypt.compare(password, user.password);
       if (!valid) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      // Build safe session object
       const session = {
         id: user.id,
         username: user.username,
@@ -83,7 +91,7 @@ export default {
     }
 
     // ============================================================
-    // MEMBERS
+    // MEMBERS (GET)
     // ============================================================
     if (url.pathname === "/api/members" && request.method === "GET") {
       const username = url.searchParams.get("username");
@@ -95,6 +103,56 @@ export default {
       if (!all) query = query.eq("active", true);
 
       const { data, error } = await query;
+      if (error) return new Response(error.message, { status: 500 });
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // MEMBERS (CREATE) — AUTOMATIC HASHING
+    // ============================================================
+    if (url.pathname === "/api/members" && request.method === "POST") {
+      const body = await request.json();
+
+      const hashedPassword = await ensureHashed(body.password);
+
+      const { data, error } = await supabase
+        .from("members")
+        .insert({
+          ...body,
+          password: hashedPassword
+        })
+        .select()
+        .single();
+
+      if (error) return new Response(error.message, { status: 500 });
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // MEMBERS (UPDATE) — AUTOMATIC HASHING
+    // ============================================================
+    const memberMatch = url.pathname.match(/^\/api\/members\/(.+)$/);
+    if (memberMatch && request.method === "PATCH") {
+      const id = memberMatch[1];
+      const body = await request.json();
+
+      const updateData = { ...body };
+
+      if (body.password) {
+        updateData.password = await ensureHashed(body.password);
+      } else {
+        delete updateData.password;
+      }
+
+      const { data, error } = await supabase
+        .from("members")
+        .update(updateData)
+        .eq("id", id)
+        .select()
+        .single();
+
       if (error) return new Response(error.message, { status: 500 });
 
       return wrapCors(Response.json(data), origin, allowed);
@@ -195,14 +253,10 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // FALLBACK
-    // ============================================================
     return wrapCors(new Response("Not found", { status: 404 }), origin, allowed);
   }
 };
 
-// Helper to attach CORS headers
 function wrapCors(response, origin, allowed) {
   const headers = new Headers(response.headers);
 
