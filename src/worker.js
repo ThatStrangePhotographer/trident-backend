@@ -141,7 +141,7 @@ export default {
         .select("id, username, role, is_active, password, password_encrypted, password_plaintext");
 
       if (username) query = query.eq("username", username.toLowerCase());
-      if (!all) query = query.eq("active", true);
+      if (!all) query = query.eq("is_active", true);
 
       const { data, error } = await query;
       if (error) return new Response(error.message, { status: 500 });
