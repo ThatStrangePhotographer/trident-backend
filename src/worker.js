@@ -319,3 +319,4 @@ function wrapCors(response, origin, allowed) {
     headers
   });
 }
+ 
