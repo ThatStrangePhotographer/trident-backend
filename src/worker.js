@@ -85,23 +85,23 @@ export default {
         .single();
 
       if (error || !user) {
-        return wrapCors(new Response("Invalid username", { status: 401 }), origin, allowed);
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
       let plaintext;
       try {
         plaintext = await decryptPassword(env, encryptedPassword);
       } catch (e) {
-        return wrapCors(new Response("Invalid password", { status: 401 }), origin, allowed);
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
       if (!plaintext) {
-        return wrapCors(new Response("Invalid password", { status: 401 }), origin, allowed);
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
       const valid = await bcrypt.compare(plaintext, user.password);
       if (!valid) {
-        return wrapCors(new Response("Invalid password", { status: 401 }), origin, allowed);
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
       const session = {
@@ -319,4 +319,3 @@ function wrapCors(response, origin, allowed) {
     headers
   });
 }
- 
