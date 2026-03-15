@@ -84,13 +84,20 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN (RSA-encrypted → decrypt → bcrypt compare)
-    // With TEMPORARY plaintext fallback for your IPs only
+    // LOGIN WITH FULL DEBUGGING
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password: encryptedPassword } = await request.json();
 
+      console.log("---- LOGIN DEBUG ----");
+      console.log("Username received:", username);
+      console.log("Encrypted password received:", encryptedPassword);
+
+      const clientIp = request.headers.get("CF-Connecting-IP");
+      console.log("Client IP:", clientIp);
+
       if (!username || !encryptedPassword) {
+        console.log("Missing username or password");
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
@@ -100,36 +107,60 @@ export default {
         .eq("username", username.toLowerCase())
         .single();
 
+      console.log("User lookup result:", user);
+      console.log("User lookup error:", error);
+
       if (error || !user) {
+        console.log("User not found");
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      const clientIp = request.headers.get("CF-Connecting-IP");
-
-      // Your IPs: IPv4 94.6.97.11, IPv6 2a06:5904:e8:5a00:9f4:f3fc:e998:2e39
       const isGeorgeIp =
         clientIp === "94.6.97.11" ||
         clientIp === "2a06:5904:e8:5a00:9f4:f3fc:e998:2e39";
 
+      console.log("Is George IP:", isGeorgeIp);
+
+      let plaintext = null;
+
       if (isGeorgeIp) {
-        // TEMPORARY: plaintext login for your IPs only
-        const plaintext = encryptedPassword; // frontend must send plaintext while this is active
-
-        if (plaintext !== user.password_plaintext) {
-          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-        }
+        console.log("Using PLAINTEXT fallback mode");
+        plaintext = encryptedPassword;
+        console.log("Plaintext received:", plaintext);
       } else {
-        // Normal secure login for everyone else
-        const plaintext = await decryptPassword(env, encryptedPassword);
-        if (!plaintext) {
-          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-        }
-
-        const valid = await bcrypt.compare(plaintext, user.password);
-        if (!valid) {
+        console.log("Attempting RSA decryption...");
+        try {
+          plaintext = await decryptPassword(env, encryptedPassword);
+          console.log("RSA decrypted plaintext:", plaintext);
+        } catch (e) {
+          console.log("RSA DECRYPT ERROR:", e);
           return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
         }
       }
+
+      if (!plaintext) {
+        console.log("Plaintext is null or empty");
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+      }
+
+      if (!isGeorgeIp) {
+        console.log("Comparing bcrypt hash...");
+        console.log("Stored hash:", user.password);
+
+        const valid = await bcrypt.compare(plaintext, user.password);
+        console.log("Bcrypt comparison result:", valid);
+
+        if (!valid) {
+          console.log("Bcrypt compare failed");
+          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+        }
+      } else {
+        console.log("Skipping bcrypt because plaintext fallback is active");
+        console.log("Comparing plaintext to stored plaintext:", user.password_plaintext);
+        console.log("Match result:", plaintext === user.password_plaintext);
+      }
+
+      console.log("LOGIN SUCCESS");
 
       const session = {
         id: user.id,
