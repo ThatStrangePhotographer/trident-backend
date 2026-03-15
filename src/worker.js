@@ -84,7 +84,7 @@ export default {
         .eq("username", username.toLowerCase())
         .maybeSingle();
 
-      if (error || !user) {
+      if (!user) {
         return wrapCors(new Response("error || !user", { status: 401 }), origin, allowed);
       }
 
