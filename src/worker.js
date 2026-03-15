@@ -39,7 +39,7 @@ async function decryptPassword(env, encryptedBase64) {
     { name: "RSA-OAEP" },
     privateKey,
     cipherBytes.buffer
-  );
+  ); 
 
   return new TextDecoder().decode(decrypted);
 }
