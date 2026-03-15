@@ -78,18 +78,14 @@ export default {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
+      // FIX: removed group_id from SELECT
       const { data: user, error } = await supabase
         .from("members")
-        .select("id, username, password, role, group_id")
+        .select("id, username, password, role")
         .eq("username", username.toLowerCase())
         .maybeSingle();
 
-      if (error) {
-        // TEMP: surface the real error so we know what’s actually wrong
-        return wrapCors(new Response(error.message || "Supabase error", { status: 500 }), origin, allowed);
-      }
-
-      if (!user) {
+      if (error || !user) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
@@ -109,6 +105,7 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
+      // FIX: removed group_id from session
       const session = {
         id: user.id,
         username: user.username,
