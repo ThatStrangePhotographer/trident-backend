@@ -82,7 +82,7 @@ export default {
         .from("members")
         .select("id, username, password, role, group_id")
         .eq("username", username.toLowerCase())
-        .single();
+        .maybeSingle();
 
       if (error || !user) {
         return wrapCors(new Response("error || !user", { status: 401 }), origin, allowed);
