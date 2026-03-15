@@ -84,7 +84,7 @@ export default {
         .eq("username", username.toLowerCase())
         .single();
 
-      if (error || !user) {
+      if (error || !username) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
