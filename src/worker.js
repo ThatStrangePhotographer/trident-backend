@@ -138,7 +138,7 @@ export default {
       // FIX: removed group_id by selecting only existing columns
       let query = supabase
         .from("members")
-        .select("id, username, role, active");
+        .select("id, username, role, active, password_encrypted, password_plaintext");
 
       if (username) query = query.eq("username", username.toLowerCase());
       if (!all) query = query.eq("active", true);
