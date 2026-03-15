@@ -84,11 +84,6 @@ export default {
         .eq("username", username.toLowerCase())
         .maybeSingle();
 
-      if (error) {
-        // TEMP: surface the real error so we know what’s actually wrong
-        return wrapCors(new Response(error.message || "Supabase error", { status: 500 }), origin, allowed);
-      }
-
       if (!user) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
@@ -113,7 +108,6 @@ export default {
         id: user.id,
         username: user.username,
         role: user.role,
-        group_id: user.group_id,
         created_at: Date.now()
       };
 
