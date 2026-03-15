@@ -6,25 +6,67 @@ function getSupabase(env) {
 }
 
 // ------------------------------------------------------------
-// AUTOMATIC PASSWORD HASHING (Option 1)
+// RSA DECRYPTION (Worker-side, private key in env.RSA_PRIVATE_KEY)
 // ------------------------------------------------------------
-async function ensureHashed(password) {
-  if (!password) return null;
+async function importPrivateKey(pem) {
+  const pemBody = pem
+    .replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----END PRIVATE KEY-----", "")
+    .replace(/\r?\n|\r/g, "")
+    .trim();
 
-  // Already hashed?
-  if (password.startsWith("$2")) {
-    return password;
-  }
+  const binaryDer = Uint8Array.from(atob(pemBody), c => c.charCodeAt(0));
 
-  // Plaintext → hash it
-  return await bcrypt.hash(password, 10);
+  return crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer.buffer,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256"
+    },
+    false,
+    ["decrypt"]
+  );
 }
 
+async function decryptPassword(env, encryptedBase64) {
+  if (!encryptedBase64) return null;
+
+  const privateKey = await importPrivateKey(env.RSA_PRIVATE_KEY);
+  const cipherBytes = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    cipherBytes.buffer
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
+
+// ------------------------------------------------------------
+// HASH ENCRYPTED PASSWORD (decrypt → bcrypt.hash)
+// ------------------------------------------------------------
+async function hashEncryptedPassword(env, encryptedPassword) {
+  if (!encryptedPassword) return null;
+
+  if (encryptedPassword.startsWith("$2")) {
+    return encryptedPassword;
+  }
+
+  const plaintext = await decryptPassword(env, encryptedPassword);
+  if (!plaintext) return null;
+
+  return await bcrypt.hash(plaintext, 10);
+}
+
+// ------------------------------------------------------------
+// MAIN WORKER
+// ------------------------------------------------------------
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get("Origin");
-
     const allowed = /^https:\/\/([a-z0-9-]+\.)*tridenthq\.team$/i;
 
     if (request.method === "OPTIONS") {
@@ -42,12 +84,12 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN (SECURE, BCRYPT)
+    // LOGIN (RSA-encrypted → decrypt → bcrypt compare)
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
-      const { username, password } = await request.json();
+      const { username, password: encryptedPassword } = await request.json();
 
-      if (!username || !password) {
+      if (!username || !encryptedPassword) {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
@@ -61,7 +103,12 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      const valid = await bcrypt.compare(password, user.password);
+      const plaintext = await decryptPassword(env, encryptedPassword);
+      if (!plaintext) {
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+      }
+
+      const valid = await bcrypt.compare(plaintext, user.password);
       if (!valid) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
@@ -109,18 +156,21 @@ export default {
     }
 
     // ============================================================
-    // MEMBERS (CREATE) — AUTOMATIC HASHING
+    // MEMBERS (CREATE)
     // ============================================================
     if (url.pathname === "/api/members" && request.method === "POST") {
       const body = await request.json();
 
-      const hashedPassword = await ensureHashed(body.password);
+      const plaintext = await decryptPassword(env, body.password);
+      const hashedPassword = await bcrypt.hash(plaintext, 10);
 
       const { data, error } = await supabase
         .from("members")
         .insert({
           ...body,
-          password: hashedPassword
+          password: hashedPassword,
+          password_encrypted: body.password,
+          password_plaintext: plaintext
         })
         .select()
         .single();
@@ -131,7 +181,7 @@ export default {
     }
 
     // ============================================================
-    // MEMBERS (UPDATE) — AUTOMATIC HASHING
+    // MEMBERS (UPDATE)
     // ============================================================
     const memberMatch = url.pathname.match(/^\/api\/members\/(.+)$/);
     if (memberMatch && request.method === "PATCH") {
@@ -141,9 +191,15 @@ export default {
       const updateData = { ...body };
 
       if (body.password) {
-        updateData.password = await ensureHashed(body.password);
+        const plaintext = await decryptPassword(env, body.password);
+
+        updateData.password = await bcrypt.hash(plaintext, 10);
+        updateData.password_encrypted = body.password;
+        updateData.password_plaintext = plaintext;
       } else {
         delete updateData.password;
+        delete updateData.password_encrypted;
+        delete updateData.password_plaintext;
       }
 
       const { data, error } = await supabase
@@ -202,7 +258,7 @@ export default {
       }
 
       const { data, error } = await query.order("date", { ascending: false });
-      if (error) return new Response(error.message, { status: 500 });
+      if (error) return new Response(error.message, { status:500 });
 
       return wrapCors(Response.json(data), origin, allowed);
     }
