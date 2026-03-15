@@ -39,7 +39,7 @@ async function decryptPassword(env, encryptedBase64) {
     { name: "RSA-OAEP" },
     privateKey,
     cipherBytes.buffer
-  ); 
+  );
 
   return new TextDecoder().decode(decrypted);
 }
@@ -84,83 +84,41 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN WITH FULL DEBUGGING
+    // LOGIN (RSA-encrypted → decrypt → bcrypt compare)
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password: encryptedPassword } = await request.json();
 
-      console.log("---- LOGIN DEBUG ----");
-      console.log("Username received:", username);
-      console.log("Encrypted password received:", encryptedPassword);
-
-      const clientIp = request.headers.get("CF-Connecting-IP");
-      console.log("Client IP:", clientIp);
-
       if (!username || !encryptedPassword) {
-        console.log("Missing username or password");
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
       const { data: user, error } = await supabase
         .from("members")
-        .select("id, username, password, password_plaintext, role, group_id")
+        .select("id, username, password, role, group_id")
         .eq("username", username.toLowerCase())
         .single();
 
-      console.log("User lookup result:", user);
-      console.log("User lookup error:", error);
-
       if (error || !user) {
-        console.log("User not found");
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      const isGeorgeIp =
-        clientIp === "94.6.97.11" ||
-        clientIp === "2a06:5904:e8:5a00:9f4:f3fc:e998:2e39";
-
-      console.log("Is George IP:", isGeorgeIp);
-
-      let plaintext = null;
-
-      if (isGeorgeIp) {
-        console.log("Using PLAINTEXT fallback mode");
-        plaintext = encryptedPassword;
-        console.log("Plaintext received:", plaintext);
-      } else {
-        console.log("Attempting RSA decryption...");
-        try {
-          plaintext = await decryptPassword(env, encryptedPassword);
-          console.log("RSA decrypted plaintext:", plaintext);
-        } catch (e) {
-          console.log("RSA DECRYPT ERROR:", e);
-          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-        }
+      let plaintext;
+      try {
+        plaintext = await decryptPassword(env, encryptedPassword);
+      } catch (e) {
+        console.log("RSA DECRYPT ERROR:", e);
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
       if (!plaintext) {
-        console.log("Plaintext is null or empty");
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      if (!isGeorgeIp) {
-        console.log("Comparing bcrypt hash...");
-        console.log("Stored hash:", user.password);
-
-        const valid = await bcrypt.compare(plaintext, user.password);
-        console.log("Bcrypt comparison result:", valid);
-
-        if (!valid) {
-          console.log("Bcrypt compare failed");
-          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-        }
-      } else {
-        console.log("Skipping bcrypt because plaintext fallback is active");
-        console.log("Comparing plaintext to stored plaintext:", user.password_plaintext);
-        console.log("Match result:", plaintext === user.password_plaintext);
+      const valid = await bcrypt.compare(plaintext, user.password);
+      if (!valid) {
+        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
-
-      console.log("LOGIN SUCCESS");
 
       const session = {
         id: user.id,
