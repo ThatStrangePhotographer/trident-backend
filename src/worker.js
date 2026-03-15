@@ -213,21 +213,6 @@ export default {
     }
 
     // ============================================================
-    // MEMBER ROLES (GET)
-    // ============================================================
-    if (/^\/api\/member-roles\/?$/.test(url.pathname) && request.method === "GET") {
-      const session_id = url.searchParams.get("session_id");
-
-      let query = supabase.from("memberrole").select("*");
-      if (session_id) query = query.eq("session_id", session_id);
-
-      const { data, error } = await query.order("assigned_date", { ascending: false });
-      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    // ============================================================
     // DRILL REFERENCES (GET)
     // ============================================================
     if (/^\/api\/drill-references\/?$/.test(url.pathname) && request.method === "GET") {
@@ -237,6 +222,59 @@ export default {
       if (category) query = query.eq("category", category);
 
       const { data, error } = await query.order("difficulty", { ascending: true });
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // DRILL REFERENCES (CREATE)
+    // ============================================================
+    if (/^\/api\/drill-references\/?$/.test(url.pathname) && request.method === "POST") {
+      const body = await request.json();
+
+      const { data, error } = await supabase
+        .from("drillreference")
+        .insert(body)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // DRILL REFERENCES (UPDATE / DELETE)
+    // ============================================================
+    const drillMatch = url.pathname.match(/^\/api\/drill-references\/(.+)$/);
+
+    if (drillMatch && request.method === "PATCH") {
+      const id = drillMatch[1];
+      const body = await request.json();
+
+      const { data, error } = await supabase
+        .from("drillreference")
+        .update(body)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    if (drillMatch && request.method === "DELETE") {
+      const id = drillMatch[1];
+
+      const { data, error } = await supabase
+        .from("drillreference")
+        .delete()
+        .eq("id", id)
+        .select()
+        .single();
+
       if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
       return wrapCors(Response.json(data), origin, allowed);
