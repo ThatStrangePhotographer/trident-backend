@@ -1,6 +1,15 @@
 name = "api-worker"
 main = "src/worker.js"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 
+# This tells Wrangler which domain the Worker runs on
+routes = [
+  { pattern = "api.tridenthq.team/*", zone_name = "tridenthq.team" }
+]
+
+# These are NOT secrets — just variable names so Wrangler knows they exist
 [vars]
 SUPABASE_URL = "https://gphzzahikvvvzamrbgkk.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = ""
+RSA_PRIVATE_KEY = ""
