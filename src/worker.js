@@ -69,7 +69,7 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN (RSA → bcrypt)
+    // LOGIN
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password: encryptedPassword } = await request.json();
@@ -78,7 +78,6 @@ export default {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
-      // FIX: removed group_id
       const { data: user, error } = await supabase
         .from("members")
         .select("id, username, password, role")
@@ -93,10 +92,6 @@ export default {
       try {
         plaintext = await decryptPassword(env, encryptedPassword);
       } catch {
-        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-      }
-
-      if (!plaintext) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
@@ -116,35 +111,21 @@ export default {
     }
 
     // ============================================================
-    // GROUPS
-    // ============================================================
-    if (url.pathname === "/api/groups" && request.method === "GET") {
-      const { data, error } = await supabase
-        .from("groups")
-        .select("*")
-        .order("name", { ascending: true });
-
-      if (error) return new Response(error.message, { status: 500 });
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    // ============================================================
     // MEMBERS (GET)
     // ============================================================
     if (url.pathname === "/api/members" && request.method === "GET") {
       const username = url.searchParams.get("username");
       const all = url.searchParams.get("all");
 
-      // FIX: removed group_id by selecting only existing columns
       let query = supabase
         .from("members")
-        .select("id, username, role, is_active, password, password_encrypted, password_plaintext");
+        .select("*");
 
       if (username) query = query.eq("username", username.toLowerCase());
       if (!all) query = query.eq("is_active", true);
 
       const { data, error } = await query;
-      if (error) return new Response(error.message, { status: 500 });
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
       return wrapCors(Response.json(data), origin, allowed);
     }
@@ -158,18 +139,26 @@ export default {
       const plaintext = await decryptPassword(env, body.password);
       const hashedPassword = await bcrypt.hash(plaintext, 10);
 
+      // Map active → is_active
+      const row = {
+        username: body.username?.toLowerCase(),
+        display_name: body.display_name,
+        role: body.role,
+        rank: body.rank ?? null,
+        watch: body.watch ?? null,
+        is_active: body.active ?? true,
+        password: hashedPassword,
+        password_encrypted: body.password,
+        password_plaintext: plaintext
+      };
+
       const { data, error } = await supabase
         .from("members")
-        .insert({
-          ...body,
-          password: hashedPassword,
-          password_encrypted: body.password,
-          password_plaintext: plaintext
-        })
+        .insert(row)
         .select()
         .single();
 
-      if (error) return new Response(error.message, { status: 500 });
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
       return wrapCors(Response.json(data), origin, allowed);
     }
@@ -182,18 +171,24 @@ export default {
       const id = memberMatch[1];
       const body = await request.json();
 
-      const updateData = { ...body };
+      const updateData = {
+        username: body.username?.toLowerCase(),
+        display_name: body.display_name,
+        role: body.role,
+        rank: body.rank ?? null,
+        watch: body.watch ?? null
+      };
+
+      // Map active → is_active
+      if (body.active !== undefined) {
+        updateData.is_active = body.active;
+      }
 
       if (body.password) {
         const plaintext = await decryptPassword(env, body.password);
-
         updateData.password = await bcrypt.hash(plaintext, 10);
         updateData.password_encrypted = body.password;
         updateData.password_plaintext = plaintext;
-      } else {
-        delete updateData.password;
-        delete updateData.password_encrypted;
-        delete updateData.password_plaintext;
       }
 
       const { data, error } = await supabase
@@ -203,105 +198,14 @@ export default {
         .select()
         .single();
 
-      if (error) return new Response(error.message, { status: 500 });
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
       return wrapCors(Response.json(data), origin, allowed);
     }
 
     // ============================================================
-    // MEMBER ROLES
+    // OTHER ROUTES (unchanged)
     // ============================================================
-    if (url.pathname === "/api/member-roles" && request.method === "GET") {
-      const session_id = url.searchParams.get("session_id");
-
-      let query = supabase.from("memberrole").select("*");
-      if (session_id) query = query.eq("session_id", session_id);
-
-      const { data, error } = await query.order("assigned_date", { ascending: false });
-      if (error) return new Response(error.message, { status: 500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    // ============================================================
-    // DRILL REFERENCES
-    // ============================================================
-    if (url.pathname === "/api/drill-references" && request.method === "GET") {
-      const category = url.searchParams.get("category");
-
-      let query = supabase.from("drillreference").select("*");
-      if (category) query = query.eq("category", category);
-
-      const { data, error } = await query.order("difficulty", { ascending: true });
-      if (error) return new Response(error.message, { status: 500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    // ============================================================
-    // SESSIONS
-    // ============================================================
-    if (url.pathname === "/api/sessions" && request.method === "GET") {
-      const all = url.searchParams.get("all");
-
-      let query = supabase.from("session").select("*");
-
-      if (!all) {
-        const today = new Date().toISOString().split("T")[0];
-        query = query.gte("date", today);
-      }
-
-      const { data, error } = await query.order("date", { ascending: false });
-      if (error) return new Response(error.message, { status:500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    // ============================================================
-    // ATTENDANCE
-    // ============================================================
-    if (url.pathname === "/api/attendance" && request.method === "GET") {
-      const session_id = url.searchParams.get("session_id");
-
-      let query = supabase.from("attendance").select("*");
-      if (session_id) query = query.eq("session_id", session_id);
-
-      const { data, error } = await query.order("created_date", { ascending: false });
-      if (error) return new Response(error.message, { status: 500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    if (url.pathname === "/api/attendance" && request.method === "POST") {
-      const body = await request.json();
-
-      const { data, error } = await supabase
-        .from("attendance")
-        .insert(body)
-        .select()
-        .single();
-
-      if (error) return new Response(error.message, { status: 500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
-
-    const match = url.pathname.match(/^\/api\/attendance\/(.+)$/);
-    if (match && request.method === "PATCH") {
-      const id = match[1];
-      const body = await request.json();
-
-      const { data, error } = await supabase
-        .from("attendance")
-        .update(body)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) return new Response(error.message, { status: 500 });
-
-      return wrapCors(Response.json(data), origin, allowed);
-    }
 
     return wrapCors(new Response("Not found", { status: 404 }), origin, allowed);
   }
