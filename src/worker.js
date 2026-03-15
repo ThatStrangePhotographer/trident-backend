@@ -78,7 +78,7 @@ export default {
         return wrapCors(new Response("Missing username or password", { status: 400 }), origin, allowed);
       }
 
-      // FIX: removed group_id from SELECT
+      // FIX: removed group_id
       const { data: user, error } = await supabase
         .from("members")
         .select("id, username, password, role")
@@ -92,7 +92,7 @@ export default {
       let plaintext;
       try {
         plaintext = await decryptPassword(env, encryptedPassword);
-      } catch (e) {
+      } catch {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
@@ -105,7 +105,6 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      // FIX: removed group_id from session
       const session = {
         id: user.id,
         username: user.username,
@@ -136,7 +135,10 @@ export default {
       const username = url.searchParams.get("username");
       const all = url.searchParams.get("all");
 
-      let query = supabase.from("members").select("*");
+      // FIX: removed group_id by selecting only existing columns
+      let query = supabase
+        .from("members")
+        .select("id, username, role, active");
 
       if (username) query = query.eq("username", username.toLowerCase());
       if (!all) query = query.eq("active", true);
