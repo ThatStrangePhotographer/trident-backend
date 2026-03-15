@@ -84,6 +84,11 @@ export default {
         .eq("username", username.toLowerCase())
         .maybeSingle();
 
+      if (error) {
+        // TEMP: surface the real error so we know what’s actually wrong
+        return wrapCors(new Response(error.message || "Supabase error", { status: 500 }), origin, allowed);
+      }
+
       if (!user) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
