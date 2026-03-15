@@ -6,7 +6,7 @@ function getSupabase(env) {
 }
 
 // ------------------------------------------------------------
-// RSA DECRYPTION (Worker-side, private key in env.RSA_PRIVATE_KEY)
+// RSA DECRYPTION
 // ------------------------------------------------------------
 async function importPrivateKey(pem) {
   const pemBody = pem
@@ -45,22 +45,6 @@ async function decryptPassword(env, encryptedBase64) {
 }
 
 // ------------------------------------------------------------
-// HASH ENCRYPTED PASSWORD (decrypt → bcrypt.hash)
-// ------------------------------------------------------------
-async function hashEncryptedPassword(env, encryptedPassword) {
-  if (!encryptedPassword) return null;
-
-  if (encryptedPassword.startsWith("$2")) {
-    return encryptedPassword;
-  }
-
-  const plaintext = await decryptPassword(env, encryptedPassword);
-  if (!plaintext) return null;
-
-  return await bcrypt.hash(plaintext, 10);
-}
-
-// ------------------------------------------------------------
 // MAIN WORKER
 // ------------------------------------------------------------
 export default {
@@ -69,6 +53,7 @@ export default {
     const origin = request.headers.get("Origin");
     const allowed = /^https:\/\/([a-z0-9-]+\.)*tridenthq\.team$/i;
 
+    // CORS
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
@@ -84,7 +69,7 @@ export default {
     const supabase = getSupabase(env);
 
     // ============================================================
-    // LOGIN (RSA-encrypted → decrypt → bcrypt compare)
+    // LOGIN (RSA → bcrypt)
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password: encryptedPassword } = await request.json();
@@ -107,7 +92,6 @@ export default {
       try {
         plaintext = await decryptPassword(env, encryptedPassword);
       } catch (e) {
-        console.log("RSA DECRYPT ERROR:", e);
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
