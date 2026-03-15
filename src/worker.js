@@ -85,6 +85,7 @@ export default {
 
     // ============================================================
     // LOGIN (RSA-encrypted → decrypt → bcrypt compare)
+    // With TEMPORARY plaintext fallback for your IPs only
     // ============================================================
     if (url.pathname === "/api/login" && request.method === "POST") {
       const { username, password: encryptedPassword } = await request.json();
@@ -95,7 +96,7 @@ export default {
 
       const { data: user, error } = await supabase
         .from("members")
-        .select("id, username, password, role, group_id")
+        .select("id, username, password, password_plaintext, role, group_id")
         .eq("username", username.toLowerCase())
         .single();
 
@@ -103,14 +104,31 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
-      const plaintext = await decryptPassword(env, encryptedPassword);
-      if (!plaintext) {
-        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
-      }
+      const clientIp = request.headers.get("CF-Connecting-IP");
 
-      const valid = await bcrypt.compare(plaintext, user.password);
-      if (!valid) {
-        return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+      // Your IPs: IPv4 94.6.97.11, IPv6 2a06:5904:e8:5a00:9f4:f3fc:e998:2e39
+      const isGeorgeIp =
+        clientIp === "94.6.97.11" ||
+        clientIp === "2a06:5904:e8:5a00:9f4:f3fc:e998:2e39";
+
+      if (isGeorgeIp) {
+        // TEMPORARY: plaintext login for your IPs only
+        const plaintext = encryptedPassword; // frontend must send plaintext while this is active
+
+        if (plaintext !== user.password_plaintext) {
+          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+        }
+      } else {
+        // Normal secure login for everyone else
+        const plaintext = await decryptPassword(env, encryptedPassword);
+        if (!plaintext) {
+          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+        }
+
+        const valid = await bcrypt.compare(plaintext, user.password);
+        if (!valid) {
+          return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
+        }
       }
 
       const session = {
