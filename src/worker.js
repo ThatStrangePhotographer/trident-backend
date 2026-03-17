@@ -6,7 +6,7 @@ function getSupabase(env) {
 }
 
 // ------------------------------------------------------------
-// RSA DECRYPTION
+// RSA DECRYPTION (frontend keeps RSA encryption)
 // ------------------------------------------------------------
 async function importPrivateKey(pem) {
   const pemBody = pem
@@ -95,6 +95,7 @@ export default {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
       }
 
+      // bcrypt compare
       const valid = await bcrypt.compare(plaintext, user.password);
       if (!valid) {
         return wrapCors(new Response("Invalid username or password", { status: 401 }), origin, allowed);
@@ -130,7 +131,10 @@ export default {
       const username = url.searchParams.get("username");
       const all = url.searchParams.get("all");
 
-      let query = supabase.from("members").select("password, role, is_active, watch, rank, display_name, username, id, password_encrypted");
+      // NOTE: removed plaintext + encrypted passwords
+      let query = supabase
+        .from("members")
+        .select("password, role, is_active, watch, rank, display_name, username, id");
 
       if (username) query = query.eq("username", username.toLowerCase());
       if (!all) query = query.eq("is_active", true);
@@ -157,9 +161,7 @@ export default {
         rank: body.rank ?? null,
         watch: body.watch ?? null,
         is_active: body.active ?? true,
-        password: hashedPassword,
-        password_encrypted: body.password,
-        password_plaintext: plaintext
+        password: hashedPassword // ONLY the hash is stored
       };
 
       const { data, error } = await supabase
@@ -195,9 +197,7 @@ export default {
 
       if (body.password) {
         const plaintext = await decryptPassword(env, body.password);
-        updateData.password = await bcrypt.hash(plaintext, 10);
-        updateData.password_encrypted = body.password;
-        updateData.password_plaintext = plaintext;
+        updateData.password = await bcrypt.hash(plaintext, 10); 
       }
 
       const { data, error } = await supabase
@@ -232,7 +232,8 @@ export default {
     }
 
     // ============================================================
-    // MEMBER ROLES (GET)
+    // MEMBER ROLES (GET, CREATE, UPDATE, DELETE)
+    // (unchanged)
     // ============================================================
     if (/^\/api\/member-roles\/?$/.test(url.pathname) && request.method === "GET") {
       const { data, error } = await supabase
@@ -245,9 +246,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // MEMBER ROLES (CREATE)
-    // ============================================================
     if (/^\/api\/member-roles\/?$/.test(url.pathname) && request.method === "POST") {
       const body = await request.json();
 
@@ -262,9 +260,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // MEMBER ROLES (UPDATE / DELETE)
-    // ============================================================
     const roleMatch = url.pathname.match(/^\/api\/member-roles\/(.+)$/);
 
     if (roleMatch && request.method === "PATCH") {
@@ -299,7 +294,7 @@ export default {
     }
 
     // ============================================================
-    // DRILL REFERENCES (GET)
+    // DRILL REFERENCES (unchanged)
     // ============================================================
     if (/^\/api\/drill-references\/?$/.test(url.pathname) && request.method === "GET") {
       const category = url.searchParams.get("category");
@@ -313,9 +308,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // DRILL REFERENCES (CREATE)
-    // ============================================================
     if (/^\/api\/drill-references\/?$/.test(url.pathname) && request.method === "POST") {
       const body = await request.json();
 
@@ -330,9 +322,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // DRILL REFERENCES (UPDATE / DELETE)
-    // ============================================================
     const drillMatch = url.pathname.match(/^\/api\/drill-references\/(.+)$/);
 
     if (drillMatch && request.method === "PATCH") {
@@ -367,7 +356,7 @@ export default {
     }
 
     // ============================================================
-    // SESSIONS (GET)
+    // SESSIONS (unchanged)
     // ============================================================
     if (/^\/api\/sessions\/?$/.test(url.pathname) && request.method === "GET") {
       const all = url.searchParams.get("all");
@@ -385,9 +374,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // SESSIONS (CREATE)
-    // ============================================================
     if (/^\/api\/sessions\/?$/.test(url.pathname) && request.method === "POST") {
       const body = await request.json();
 
@@ -402,9 +388,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // SESSIONS (UPDATE / DELETE)
-    // ============================================================
     const sessionMatch = url.pathname.match(/^\/api\/sessions\/(.+)$/);
 
     if (sessionMatch && request.method === "PATCH") {
@@ -439,7 +422,7 @@ export default {
     }
 
     // ============================================================
-    // ATTENDANCE (GET)
+    // ATTENDANCE (unchanged)
     // ============================================================
     if (/^\/api\/attendance\/?$/.test(url.pathname) && request.method === "GET") {
       const session_id = url.searchParams.get("session_id");
@@ -453,9 +436,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // ATTENDANCE (CREATE)
-    // ============================================================
     if (/^\/api\/attendance\/?$/.test(url.pathname) && request.method === "POST") {
       const body = await request.json();
 
@@ -470,9 +450,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // ATTENDANCE (UPDATE)
-    // ============================================================
     const attendanceMatch = url.pathname.match(/^\/api\/attendance\/(.+)$/);
     if (attendanceMatch && request.method === "PATCH") {
       const id = attendanceMatch[1];
@@ -490,9 +467,6 @@ export default {
       return wrapCors(Response.json(data), origin, allowed);
     }
 
-    // ============================================================
-    // FALLBACK
-    // ============================================================
     return wrapCors(new Response("Not found", { status: 404 }), origin, allowed);
   }
 };
