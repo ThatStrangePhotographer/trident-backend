@@ -238,7 +238,7 @@ export default {
       const { data, error } = await supabase
         .from("member_roles")
         .select("*")
-        .order("name", { ascending: true });
+        .order("member_name", { ascending: true });
 
       if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
