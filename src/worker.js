@@ -213,6 +213,92 @@ export default {
     }
 
     // ============================================================
+    // MEMBERS (DELETE)
+    // ============================================================
+    const memberDeleteMatch = url.pathname.match(/^\/api\/members\/(.+)$/);
+    if (memberDeleteMatch && request.method === "DELETE") {
+      const id = memberDeleteMatch[1];
+
+      const { data, error } = await supabase
+        .from("members")
+        .delete()
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json({ success: true, deleted: data }), origin, allowed);
+    }
+
+    // ============================================================
+    // MEMBER ROLES (GET)
+    // ============================================================
+    if (/^\/api\/member-roles\/?$/.test(url.pathname) && request.method === "GET") {
+      const { data, error } = await supabase
+        .from("member_roles")
+        .select("*")
+        .order("name", { ascending: true });
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // MEMBER ROLES (CREATE)
+    // ============================================================
+    if (/^\/api\/member-roles\/?$/.test(url.pathname) && request.method === "POST") {
+      const body = await request.json();
+
+      const { data, error } = await supabase
+        .from("member_roles")
+        .insert(body)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    // ============================================================
+    // MEMBER ROLES (UPDATE / DELETE)
+    // ============================================================
+    const roleMatch = url.pathname.match(/^\/api\/member-roles\/(.+)$/);
+
+    if (roleMatch && request.method === "PATCH") {
+      const id = roleMatch[1];
+      const body = await request.json();
+
+      const { data, error } = await supabase
+        .from("member_roles")
+        .update(body)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json(data), origin, allowed);
+    }
+
+    if (roleMatch && request.method === "DELETE") {
+      const id = roleMatch[1];
+
+      const { data, error } = await supabase
+        .from("member_roles")
+        .delete()
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
+
+      return wrapCors(Response.json({ success: true, deleted: data }), origin, allowed);
+    }
+
+    // ============================================================
     // DRILL REFERENCES (GET)
     // ============================================================
     if (/^\/api\/drill-references\/?$/.test(url.pathname) && request.method === "GET") {
@@ -277,7 +363,7 @@ export default {
 
       if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
-      return wrapCors(Response.json(data), origin, allowed);
+      return wrapCors(Response.json({ success: true, deleted: data }), origin, allowed);
     }
 
     // ============================================================
@@ -349,7 +435,7 @@ export default {
 
       if (error) return wrapCors(new Response(error.message, { status: 500 }), origin, allowed);
 
-      return wrapCors(Response.json(data), origin, allowed);
+      return wrapCors(Response.json({ success: true, deleted: data }), origin, allowed);
     }
 
     // ============================================================
