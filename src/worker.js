@@ -130,7 +130,7 @@ export default {
       const username = url.searchParams.get("username");
       const all = url.searchParams.get("all");
 
-      let query = supabase.from("members").select("*");
+      let query = supabase.from("members").select("password, role, is_active, watch, rank, display_name, username, id, password_encrypted);
 
       if (username) query = query.eq("username", username.toLowerCase());
       if (!all) query = query.eq("is_active", true);
